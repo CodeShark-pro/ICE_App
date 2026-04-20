@@ -32,7 +32,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
+                <action android:name="ACTION_TRIGGER_SOS" /> </intent-filter>
 
             <meta-data
                 android:name="android.appwidget.provider"
