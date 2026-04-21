@@ -8,38 +8,60 @@ import android.net.Uri
 import android.telephony.SmsManager
 import android.widget.Toast
 import com.google.android.gms.location.LocationServices
+import org.json.JSONArray
 
 object EmergencyAction {
 
     @SuppressLint("MissingPermission")
     fun triggerSOS(context: Context, onComplete: () -> Unit = {}) {
         val sharedPreferences = context.getSharedPreferences("ICE_PREFS", Context.MODE_PRIVATE)
-        val contactNumber = sharedPreferences.getString("CONTACT_NUMBER", "")
+        val jsonString = sharedPreferences.getString("CONTACTS_JSON", "[]")
 
-        if (contactNumber.isNullOrEmpty()) {
-            Toast.makeText(context, "No emergency contact saved!", Toast.LENGTH_LONG).show()
+        val phoneNumbers = mutableListOf<String>()
+
+        // 1. Extract all numbers from the saved JSON array
+        try {
+            val jsonArray = JSONArray(jsonString)
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                phoneNumbers.add(jsonObject.getString("number"))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        if (phoneNumbers.isEmpty()) {
+            Toast.makeText(context, "No emergency contacts saved!", Toast.LENGTH_LONG).show()
             onComplete()
             return
         }
 
+        // 2. Fetch Location and Trigger Actions
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
 
         fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+            val message: String
             if (location != null) {
                 val mapLink = "https://maps.google.com/?q=${location.latitude},${location.longitude}"
-                val message = "EMERGENCY! I need help. My location: $mapLink"
-
-                sendSms(context, contactNumber, message)
-                makePhoneCall(context, contactNumber)
+                message = "EMERGENCY! I need help. My location: $mapLink"
             } else {
-                val fallbackMessage = "EMERGENCY! I need help, but my GPS signal is currently lost."
-                sendSms(context, contactNumber, fallbackMessage)
-                makePhoneCall(context, contactNumber)
+                message = "EMERGENCY! I need help, but my GPS signal is currently lost."
             }
+
+            // Send SMS to EVERYONE on the list
+            for (number in phoneNumbers) {
+                sendSms(context, number, message)
+            }
+
+            // Call the FIRST contact on the list
+            makePhoneCall(context, phoneNumbers[0])
+
             onComplete()
         }.addOnFailureListener {
             Toast.makeText(context, "Failed to get location.", Toast.LENGTH_SHORT).show()
-            makePhoneCall(context, contactNumber)
+
+            // Still attempt to call the primary contact even if location fails
+            makePhoneCall(context, phoneNumbers[0])
             onComplete()
         }
     }
@@ -48,9 +70,7 @@ object EmergencyAction {
         try {
             val smsManager = context.getSystemService(SmsManager::class.java)
             smsManager.sendTextMessage(phoneNumber, null, message, null, null)
-            Toast.makeText(context, "Emergency SMS Sent", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(context, "SMS Failed: Check permissions", Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
     }
@@ -64,7 +84,7 @@ object EmergencyAction {
             }
             context.startActivity(callIntent)
         } catch (e: SecurityException) {
-            Toast.makeText(context, "Call Permission Missing", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
         }
     }
 }
