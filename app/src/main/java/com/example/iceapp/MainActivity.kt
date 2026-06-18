@@ -1,43 +1,55 @@
 package com.example.iceapp
 
-import android.content.Context
+import android.Manifest
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
-import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
+
+    // Keep the permissions logic on the main screen
+    private val requestPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val smsGranted = permissions[Manifest.permission.SEND_SMS] ?: false
+        val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val callGranted = permissions[Manifest.permission.CALL_PHONE] ?: false
+
+        if (!smsGranted || !locationGranted || !callGranted) {
+            Toast.makeText(this, "Permissions are required for the app to function.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Find our UI elements by their IDs
-        val etContactNumber = findViewById<EditText>(R.id.etContactNumber)
-        val btnSave = findViewById<Button>(R.id.btnSave)
+        // Request permissions on startup
+        requestPermissionsLauncher.launch(
+            arrayOf(
+                Manifest.permission.SEND_SMS,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.CALL_PHONE
+            )
+        )
 
-        // Initialize SharedPreferences to save the data
-        val sharedPreferences = getSharedPreferences("ICE_PREFS", Context.MODE_PRIVATE)
+        val btnMainSOS = findViewById<Button>(R.id.btnMainSOS)
+        val btnManageContacts = findViewById<Button>(R.id.btnManageContacts)
 
-        // Load the saved number when the app opens (if one exists)
-        val savedNumber = sharedPreferences.getString("CONTACT_NUMBER", "")
-        etContactNumber.setText(savedNumber)
+        // 1. The in-app SOS button uses the exact same engine as our widget!
+        btnMainSOS.setOnClickListener {
+            Toast.makeText(this, "Initiating Emergency Protocol...", Toast.LENGTH_SHORT).show()
+            EmergencyAction.triggerSOS(this)
+        }
 
-        // What happens when the user clicks "Save"
-        btnSave.setOnClickListener {
-            val number = etContactNumber.text.toString().trim()
-
-            // Checks if the string is exactly 10 digits long (standard mobile format)
-            if (number.length == 10 && number.all { it.isDigit() }) {
-                val editor = sharedPreferences.edit()
-                editor.putString("CONTACT_NUMBER", number)
-                editor.apply()
-
-                Toast.makeText(this, "Contact Saved!", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Please enter a valid 10-digit number", Toast.LENGTH_SHORT).show()
-            }
+        // 2. The Navigation Intent (Moves to the Contacts page)
+        btnManageContacts.setOnClickListener {
+            val intent = Intent(this, ContactsActivity::class.java)
+            startActivity(intent)
         }
     }
 }
